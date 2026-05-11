@@ -19,15 +19,8 @@ jobs:
     with:
       runner: '["ubuntu-latest"]'
 
-  trivy:
-    needs: buildx
-    uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@latest
-    with:
-      runner: '["ubuntu-latest"]'
-      image: ${{ needs.buildx.outputs.image }}
-
   release:
-    needs: [ buildx, trivy ]
+    needs: buildx
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@latest
     with:
       runner: '["ubuntu-latest"]'
