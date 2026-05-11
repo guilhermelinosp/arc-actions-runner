@@ -1,6 +1,7 @@
 name: pipeline
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main ]
   pull_request:
@@ -15,20 +16,25 @@ permissions:
 jobs:
   buildx:
     uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@latest
+    with:
+      runner: '["ubuntu-latest"]'
 
   trivy:
     needs: buildx
     uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@latest
     with:
+      runner: '["ubuntu-latest"]'
       image: ${{ needs.buildx.outputs.image }}
 
   release:
     needs: [ buildx, trivy ]
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@latest
-
+    with:
+      runner: '["ubuntu-latest"]'
   push:
     needs: [ release, buildx ]
     uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@latest
     with:
+      runner: '["ubuntu-latest"]'
       image: ${{ needs.buildx.outputs.image }}
       version: ${{ needs.release.outputs.version }}
