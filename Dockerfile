@@ -65,7 +65,7 @@ COPY --from=cosign /usr/local/bin/cosign /usr/local/bin/cosign
 COPY --from=gh-cli /usr/local/bin/gh /usr/local/bin/gh
 COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
 
-RUN mkdir -p /home/runner /runner/_work && \
+RUN mkdir -p /home/runner /home/runner/_work /runner/_work && \
     chmod +x \
         /usr/libexec/docker/cli-plugins/docker-buildx \
         /usr/local/bin/trivy \
@@ -74,6 +74,6 @@ RUN mkdir -p /home/runner /runner/_work && \
         /usr/local/bin/crane && \
     chown -R runner:docker /home/runner /runner && \
     chmod -R a+rX /usr/local/bin/trivy /usr/local/bin/cosign /usr/local/bin/gh /usr/local/bin/crane /usr/libexec/docker/cli-plugins/docker-buildx
-
+ENV RUNNER_WORK_DIRECTORY=/home/runner/_work
 WORKDIR /home/runner
 USER runner
