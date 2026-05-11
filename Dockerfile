@@ -3,25 +3,40 @@ ARG COSIGN_VERSION=3.0.6
 ARG GH_VERSION=2.90.0
 ARG CRANE_VERSION=0.21.5
 ARG BUILDX_VERSION=0.33.0
-FROM summerwind/actions-runner:latest AS base
+
+FROM ghcr.io/actions/actions-runner:latest AS base
 
 USER root
-ENV DEBIAN_FRONTEND=noninteractive TERM=xterm
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TERM=xterm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl git jq unzip gnupg wget yq \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    unzip \
+    gnupg \
+    wget \
+    yq \
+    tar \
+    gzip \
+    bash \
+    openssh-client \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN mkdir -p /usr/libexec/docker/cli-plugins /opt/tools/bin
+
 FROM base AS buildx
 
 ARG BUILDX_VERSION
 
-RUN --mount=type=cache,target=/tmp/buildx-cache \
-    curl -fsSLO "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-amd64" && \
+RUN curl -fsSLO "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-amd64" && \
     mv buildx-v${BUILDX_VERSION}.linux-amd64 /usr/libexec/docker/cli-plugins/docker-buildx && \
     chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
+
 FROM base AS trivy
 
 ARG TRIVY_VERSION
@@ -67,16 +82,23 @@ COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
 
 RUN mkdir -p /home/runner/_work /home/runner/_temp /home/runner/_tool && \
     chmod +x \
-        /usr/libexec/docker/cli-plugins/docker-buildx \
-        /usr/local/bin/trivy \
-        /usr/local/bin/cosign \
-        /usr/local/bin/gh \
-        /usr/local/bin/crane && \
-    chown -R runner:docker /home/runner && \
-    chmod -R a+rX /usr/local/bin/trivy /usr/local/bin/cosign /usr/local/bin/gh /usr/local/bin/crane /usr/libexec/docker/cli-plugins/docker-buildx
-ENV RUNNER_ASSETS_DIR=/home/runner
+      /usr/libexec/docker/cli-plugins/docker-buildx \
+      /usr/local/bin/trivy \
+      /usr/local/bin/cosign \
+      /usr/local/bin/gh \
+      /usr/local/bin/crane && \
+    chown -R runner:runner /home/runner && \
+    chmod -R a+rX \
+      /usr/local/bin/trivy \
+      /usr/local/bin/cosign \
+      /usr/local/bin/gh \
+      /usr/local/bin/crane \
+      /usr/libexec/docker/cli-plugins/docker-buildx
+
 ENV RUNNER_WORK_DIRECTORY=/home/runner/_work
 ENV RUNNER_TEMP=/home/runner/_temp
 ENV RUNNER_TOOL_CACHE=/home/runner/_tool
+
 WORKDIR /home/runner
+
 USER runner
