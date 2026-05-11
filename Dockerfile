@@ -65,15 +65,15 @@ COPY --from=cosign /usr/local/bin/cosign /usr/local/bin/cosign
 COPY --from=gh-cli /usr/local/bin/gh /usr/local/bin/gh
 COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
 
-RUN chmod +x \
+RUN mkdir -p /home/runner /runner/_work && \
+    chmod +x \
         /usr/libexec/docker/cli-plugins/docker-buildx \
         /usr/local/bin/trivy \
         /usr/local/bin/cosign \
         /usr/local/bin/gh \
         /usr/local/bin/crane && \
-    chown -R runner:docker /home/runner && \
+    chown -R runner:docker /home/runner /runner && \
     chmod -R a+rX /usr/local/bin/trivy /usr/local/bin/cosign /usr/local/bin/gh /usr/local/bin/crane /usr/libexec/docker/cli-plugins/docker-buildx
 
-LABEL org.opencontainers.image.source="https://github.com/guilhermelinosp/arc-runner" \
-      org.opencontainers.image.description="Custom actions-runner com ferramentas de segurança e CI" \
-      org.opencontainers.image.licenses="MIT"
+WORKDIR /home/runner
+USER runner
