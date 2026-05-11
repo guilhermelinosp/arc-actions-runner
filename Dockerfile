@@ -74,9 +74,6 @@ RUN chmod +x \
     chown -R runner:docker /home/runner && \
     chmod -R a+rX /usr/local/bin/trivy /usr/local/bin/cosign /usr/local/bin/gh /usr/local/bin/crane /usr/libexec/docker/cli-plugins/docker-buildx
 
-WORKDIR /home/runner
-USER runner
-
 LABEL org.opencontainers.image.source="https://github.com/guilhermelinosp/arc-runner" \
       org.opencontainers.image.description="Custom actions-runner com ferramentas de segurança e CI" \
       org.opencontainers.image.licenses="MIT"
