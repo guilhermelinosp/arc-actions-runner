@@ -29,12 +29,10 @@ jobs:
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@latest
     with:
       runner: ubuntu-latest
-      registry_owner: ${{ github.repository_owner }}
   push:
     needs: [ release, buildx ]
     uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@latest
     with:
       runner: ubuntu-latest
-      registry_owner: ${{ github.repository_owner }}
       image: ${{ needs.buildx.outputs.image }}
       version: ${{ needs.release.outputs.version }}
