@@ -1,8 +1,6 @@
 name: pipeline
 
 on:
-  push:
-    branches: [main, staging, feat/*]
   pull_request:
     branches: [main, staging]
 
@@ -14,25 +12,19 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - if: github.event_name == 'push'
-        run: echo "❌ Push direto nao permitido" && exit 1
-
-      - if: github.event_name == 'pull_request'
-        run: |
+      - run: |
           HEAD="${{ github.head_ref }}"
           BASE="${{ github.base_ref }}"
           echo "PR: $HEAD → $BASE"
 
-          # staging → main: sempre permitido (release)
           if [ "$HEAD" = "staging" ] && [ "$BASE" = "main" ]; then
             echo "✅ staging → main (release)"
             exit 0
           fi
 
-          # feat/* → staging/main: validar branch e title
           case "$HEAD" in
             feat/*) echo "✅ branch: $HEAD" ;;
-            *) echo "❌ Use feat/* para staging/main"; exit 1 ;;
+            *) echo "❌ Use feat/*"; exit 1 ;;
           esac
 
           echo "${{ github.event.pull_request.title }}" | grep -qE '^(feat|fix|docs|style|ref|refactor|test|chore|ci|perf|build|revert)(\(.+\))?!?:\s.+' \
