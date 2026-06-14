@@ -118,12 +118,25 @@ jobs:
       - name: Login GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Promote tags
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           SRC="${{ needs.buildx.outputs.image }}"
           DST="ghcr.io/${{ github.repository }}"
           echo "Promoting $SRC → $DST:latest"
           docker buildx imagetools create --tag "$DST:latest" "$SRC"
+
+          # Se tiver tag do release (via PR staging→main), usa ela
           if [ -n "${{ needs.release.outputs.tag }}" ]; then
             echo "Also tagging: $DST:${{ needs.release.outputs.tag }}"
             docker buildx imagetools create --tag "$DST:${{ needs.release.outputs.tag }}" "$SRC"
+          fi
+
+          # Em push direto, busca a última release para taguear
+          if [ "${{ github.event_name }}" = "push" ]; then
+            LATEST_TAG=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+            if [ -n "$LATEST_TAG" ]; then
+              echo "Also tagging: $DST:$LATEST_TAG"
+              docker buildx imagetools create --tag "$DST:$LATEST_TAG" "$SRC"
+            fi
           fi
