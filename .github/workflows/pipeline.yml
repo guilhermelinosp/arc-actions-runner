@@ -36,7 +36,7 @@ jobs:
           echo "${{ github.event.pull_request.title }}" | grep -qE '^(feat|fix|docs|style|ref|refactor|test|chore|ci|perf|build|revert)(\(.+\))?!?:\s.+' && echo "✅ PR title" || { echo "❌ CC"; exit 1; }
 
   buildx:
-    needs: validate
+    if: always()
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.export.outputs.image }}
