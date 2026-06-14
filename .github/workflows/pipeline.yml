@@ -1,8 +1,6 @@
 name: pipeline
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main, staging]
 
@@ -24,13 +22,18 @@ jobs:
           HEAD="${{ github.head_ref }}"
           BASE="${{ github.base_ref }}"
           echo "PR: $HEAD → $BASE"
-          if [ "$HEAD" = "staging" ] && [ "$BASE" = "main" ]; then echo "✅ staging → main"; exit 0; fi
-          case "$HEAD" in feat/*) echo "✅ branch: $HEAD" ;; *) echo "❌ Use feat/*"; exit 1 ;; esac
+          if [ "$HEAD" = "staging" ] && [ "$BASE" = "main" ]; then
+            echo "✅ staging → main"
+            exit 0
+          fi
+          case "$HEAD" in
+            feat/*) echo "✅ branch: $HEAD" ;;
+            *) echo "❌ Use feat/*"; exit 1 ;;
+          esac
           echo "${{ github.event.pull_request.title }}" | grep -qE '^(feat|fix|docs|style|ref|refactor|test|chore|ci|perf|build|revert)(\(.+\))?!?:\s.+' && echo "✅ PR title" || { echo "❌ CC"; exit 1; }
 
   buildx:
     needs: validate
-    if: always()
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.export.outputs.image }}
@@ -49,7 +52,6 @@ jobs:
       - name: Build and push
         run: |
           IMAGE="${{ steps.meta.outputs.tag }}"
-          CACHE="ghcr.io/${{ github.repository_owner }}/${{ steps.meta.outputs.image_name }}:cache"
           docker buildx build --platform linux/amd64 --push --attest type=sbom --attest type=provenance,mode=max -t $IMAGE .
       - name: Export digest
         id: export
@@ -60,7 +62,6 @@ jobs:
 
   trivy:
     needs: buildx
-    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Scan
@@ -77,7 +78,7 @@ jobs:
 
   release:
     needs: [buildx, trivy]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.base_ref == 'main' && github.head_ref == 'staging'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -96,17 +97,17 @@ jobs:
             || git log --format="%s" "$LATEST..HEAD" 2>/dev/null | grep -q "^feat" && { MINOR=$((MINOR+1)); PATCH=0; } \
             || PATCH=$((PATCH+1))
           echo "tag=v${MAJOR}.${MINOR}.${PATCH}" >> $GITHUB_OUTPUT
+          echo "target=${{ github.sha }}" >> $GITHUB_OUTPUT
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.semver.outputs.tag }}"
-          [ "${{ steps.semver.outputs.first }}" = "true" ] && NOTES="" || NOTES="--notes-start-tag ${{ steps.semver.outputs.latest }}"
-          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --generate-notes $NOTES
+          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --generate-notes --target "${{ github.sha }}"
 
   push:
     needs: [release, buildx]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.base_ref == 'main' && github.head_ref == 'staging'
     runs-on: ubuntu-latest
     steps:
       - name: Login GHCR
@@ -116,4 +117,5 @@ jobs:
           SRC="${{ needs.buildx.outputs.image }}"
           DST="ghcr.io/${{ github.repository }}"
           VERSION="${{ needs.release.outputs.tag }}"
+          echo "Promoting $SRC → $DST:latest, $DST:$VERSION"
           docker buildx imagetools create --tag "$DST:latest" --tag "$DST:$VERSION" "$SRC"
