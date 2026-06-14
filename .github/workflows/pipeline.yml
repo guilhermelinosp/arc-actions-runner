@@ -1,12 +1,19 @@
 name: pipeline
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main, staging]
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
 
 jobs:
   validate:
@@ -16,16 +23,96 @@ jobs:
           HEAD="${{ github.head_ref }}"
           BASE="${{ github.base_ref }}"
           echo "PR: $HEAD → $BASE"
+          if [ "$HEAD" = "staging" ] && [ "$BASE" = "main" ]; then echo "✅ staging → main"; exit 0; fi
+          case "$HEAD" in feat/*) echo "✅ branch: $HEAD" ;; *) echo "❌ Use feat/*"; exit 1 ;; esac
+          echo "${{ github.event.pull_request.title }}" | grep -qE '^(feat|fix|docs|style|ref|refactor|test|chore|ci|perf|build|revert)(\(.+\))?!?:\s.+' && echo "✅ PR title" || { echo "❌ CC"; exit 1; }
 
-          if [ "$HEAD" = "staging" ] && [ "$BASE" = "main" ]; then
-            echo "✅ staging → main (release)"
-            exit 0
-          fi
+  buildx:
+    needs: validate
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.export.outputs.image }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Login GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Meta
+        id: meta
+        run: |
+          IMAGE_NAME=$(cat config.yml 2>/dev/null | grep "image:" | awk '{print $2}') || IMAGE_NAME="${{ github.event.repository.name }}"
+          echo "tag=ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+      - name: Setup buildx
+        run: docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
+      - name: Build and push
+        run: |
+          IMAGE="${{ steps.meta.outputs.tag }}"
+          CACHE="ghcr.io/${{ github.repository_owner }}/${{ steps.meta.outputs.image_name }}:cache"
+          docker buildx build --platform linux/amd64 --push --attest type=sbom --attest type=provenance,mode=max -t $IMAGE .
+      - name: Export digest
+        id: export
+        run: |
+          IMAGE="${{ steps.meta.outputs.tag }}"
+          DIGEST=$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "image=ghcr.io/${{ github.repository_owner }}/${{ steps.meta.outputs.image_name }}@${DIGEST}" >> $GITHUB_OUTPUT
 
-          case "$HEAD" in
-            feat/*) echo "✅ branch: $HEAD" ;;
-            *) echo "❌ Use feat/*"; exit 1 ;;
-          esac
+  trivy:
+    needs: buildx
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scan
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --format sarif --output trivy.sarif --no-progress "${{ needs.buildx.outputs.image }}" || true
+      - name: Upload SARIF
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy.sarif
 
-          echo "${{ github.event.pull_request.title }}" | grep -qE '^(feat|fix|docs|style|ref|refactor|test|chore|ci|perf|build|revert)(\(.+\))?!?:\s.+' \
-            && echo "✅ PR title" || { echo "❌ Conventional Commits"; exit 1; }
+  release:
+    needs: [buildx, trivy]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - name: Bump version
+        id: semver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST=$(gh release list --repo ${{ github.repository }} --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
+          if [ -z "$LATEST" ]; then echo "tag=v1.0.1" >> $GITHUB_OUTPUT; echo "first=true" >> $GITHUB_OUTPUT; exit 0; fi
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST#v}"
+          git log --format="%s" "$LATEST..HEAD" 2>/dev/null | grep -q "BREAKING CHANGE\|!:" && { MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0; } \
+            || git log --format="%s" "$LATEST..HEAD" 2>/dev/null | grep -q "^feat" && { MINOR=$((MINOR+1)); PATCH=0; } \
+            || PATCH=$((PATCH+1))
+          echo "tag=v${MAJOR}.${MINOR}.${PATCH}" >> $GITHUB_OUTPUT
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.semver.outputs.tag }}"
+          [ "${{ steps.semver.outputs.first }}" = "true" ] && NOTES="" || NOTES="--notes-start-tag ${{ steps.semver.outputs.latest }}"
+          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --generate-notes $NOTES
+
+  push:
+    needs: [release, buildx]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Promote tags
+        run: |
+          SRC="${{ needs.buildx.outputs.image }}"
+          DST="ghcr.io/${{ github.repository }}"
+          VERSION="${{ needs.release.outputs.tag }}"
+          docker buildx imagetools create --tag "$DST:latest" --tag "$DST:$VERSION" "$SRC"
