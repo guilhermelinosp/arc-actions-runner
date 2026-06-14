@@ -15,32 +15,20 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ github.token }}
-
-      - name: Bump version
+      - name: Bump and release
         id: semver
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           LATEST=$(gh release list --repo ${{ github.repository }} --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
-          if [ -z "$LATEST" ]; then echo "tag=v1.0.1" >> $GITHUB_OUTPUT; echo "first=true" >> $GITHUB_OUTPUT; exit 0; fi
-          IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST#v}"
-          MAJOR=${MAJOR:-1}; MINOR=${MINOR:-0}; PATCH=${PATCH:-0}
-          git log --format="%s" "$LATEST..HEAD" 2>/dev/null | grep -q "BREAKING CHANGE\|!:" && { MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0; } \
-            || git log --format="%s" "$LATEST..HEAD" 2>/dev/null | grep -q "^feat" && { MINOR=$((MINOR+1)); PATCH=0; } \
-            || PATCH=$((PATCH+1))
-          echo "tag=v${MAJOR}.${MINOR}.${PATCH}" >> $GITHUB_OUTPUT
-          echo "latest=$LATEST" >> $GITHUB_OUTPUT
-
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="${{ steps.semver.outputs.tag }}"
-          [ "${{ steps.semver.outputs.first }}" = "true" ] && NOTES="" || NOTES="--notes-start-tag ${{ steps.semver.outputs.latest }}"
-          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --generate-notes $NOTES
-
-      - name: Update latest tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git tag -f latest && git push origin latest --force
+          TIP=$(git rev-parse HEAD)
+          HAS_TAG=$(git tag --points-at "$TIP" | head -1)
+          if [ -n "$HAS_TAG" ]; then echo "Commit já tem tag $HAS_TAG"; exit 0; fi
+          if [ -z "$LATEST" ]; then TAG="v1.0.1"; else
+            IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST#v}"
+            git log --format="%s" "$LATEST..HEAD" 2>/dev/null | grep -q "BREAKING CHANGE\|!:" && { MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0; } \
+              || git log --format="%s" "$LATEST..HEAD" 2>/dev/null | grep -q "^feat" && { MINOR=$((MINOR+1)); PATCH=0; } \
+              || PATCH=$((PATCH+1))
+            TAG="v${MAJOR}.${MINOR}.${PATCH}"
+          fi
+          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --generate-notes
