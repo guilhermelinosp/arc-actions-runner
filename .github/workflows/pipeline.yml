@@ -4,6 +4,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, staging]
+  push:
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -80,6 +82,8 @@ jobs:
   release:
     needs: [buildx, trivy]
     if: github.base_ref == 'main' && github.head_ref == 'staging'
+    outputs:
+      tag: ${{ steps.semver.outputs.tag }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -107,8 +111,8 @@ jobs:
           gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --generate-notes --target "${{ github.sha }}"
 
   push:
-    needs: [release, buildx]
-    if: github.base_ref == 'main' && github.head_ref == 'staging'
+    needs: [buildx]
+    if: github.event_name == 'push' || (github.base_ref == 'main' && github.head_ref == 'staging')
     runs-on: ubuntu-latest
     steps:
       - name: Login GHCR
@@ -117,6 +121,9 @@ jobs:
         run: |
           SRC="${{ needs.buildx.outputs.image }}"
           DST="ghcr.io/${{ github.repository }}"
-          VERSION="${{ needs.release.outputs.tag }}"
-          echo "Promoting $SRC → $DST:latest, $DST:$VERSION"
-          docker buildx imagetools create --tag "$DST:latest" --tag "$DST:$VERSION" "$SRC"
+          echo "Promoting $SRC → $DST:latest"
+          docker buildx imagetools create --tag "$DST:latest" "$SRC"
+          if [ -n "${{ needs.release.outputs.tag }}" ]; then
+            echo "Also tagging: $DST:${{ needs.release.outputs.tag }}"
+            docker buildx imagetools create --tag "$DST:${{ needs.release.outputs.tag }}" "$SRC"
+          fi
