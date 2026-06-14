@@ -1,38 +1,23 @@
 name: pipeline
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main, feat/*]
   pull_request:
-    branches: [ main ]
-
-permissions:
-  contents: write
-  packages: write
-  id-token: write
-  security-events: write
+    branches: [main]
 
 concurrency:
-  group: image-push-${{ github.repository }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  buildx:
-    uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@latest
-    with:
-      runner: ubuntu-latest
-      registry_owner: ${{ github.repository_owner }}
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - if: github.event_name == 'push'
+        run: echo "❌ Push direto nao permitido" && exit 1
+      - if: github.event_name == 'pull_request'
+        run: |
+          case "${{ github.head_ref }}" in feat/*) echo "✅ ${{ github.head_ref }}" ;; *) echo "❌ Use feat/*"; exit 1 ;; esac
+          echo "${{ github.event.pull_request.title }}" | grep -qE '^(feat|fix|docs|style|ref|refactor|test|chore|ci|perf|build|revert)(\(.+\))?!?:\s.+' && echo "✅ PR title" || { echo "❌ Deve seguir Conventional Commits"; exit 1; }
 
-  release:
-    needs: buildx
-    uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@latest
-    with:
-      runner: ubuntu-latest
-  push:
-    needs: [ release, buildx ]
-    uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@latest
-    with:
-      runner: ubuntu-latest
-      image: ${{ needs.buildx.outputs.image }}
-      version: ${{ needs.release.outputs.version }}
