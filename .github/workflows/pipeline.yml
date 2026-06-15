@@ -23,15 +23,8 @@ jobs:
       runner: ubuntu-latest
       registry_owner: ${{ github.repository_owner }}
 
-  trivy:
-    needs: buildx
-    uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@main
-    with:
-      runner: ubuntu-latest
-      image: ${{ needs.buildx.outputs.image }}
-
   release:
-    needs: [buildx, trivy]
+    needs: buildx
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
     with:
