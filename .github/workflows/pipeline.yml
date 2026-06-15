@@ -19,14 +19,14 @@ permissions:
 jobs:
   validate:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - run: |
           H="${{ github.head_ref }}"; B="${{ github.base_ref }}"
           echo "PR: $H → $B"
 
   buildx:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       image: ${{ steps.export.outputs.image }}
     steps:
@@ -52,7 +52,7 @@ jobs:
 
   trivy:
     needs: buildx
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Scan
         env:
@@ -64,7 +64,7 @@ jobs:
   release:
     needs: [buildx, trivy]
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       tag: ${{ steps.semver.outputs.tag }}
     steps:
@@ -99,7 +99,7 @@ jobs:
   push:
     needs: [buildx, release]
     if: github.event_name == 'push' || github.base_ref == 'main'
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     env: { GH_TOKEN: "${{ github.token }}" }
     steps:
       - name: Login GHCR
