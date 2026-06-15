@@ -40,18 +40,17 @@ jobs:
         id: meta
         run: |
           NAME="arc-runner"
-          echo "tag=ghcr.io/${{ github.repository_owner }}/${NAME}:${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "tag=ghcr.io/${{ github.repository_owner }}/${NAME}:build-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
       - name: Setup buildx
         run: docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
-      - name: Build and push
+      - name: Build and push (latest apenas)
         run: |
-          IMG="${{ steps.meta.outputs.tag }}"
-          docker buildx build --platform linux/amd64 --push --attest type=sbom --attest type=provenance,mode=max -t "$IMG" .
+          docker buildx build --platform linux/amd64 --push --attest type=sbom --attest type=provenance,mode=max \
+            -t "ghcr.io/${{ github.repository_owner }}/arc-runner:latest" .
       - name: Export digest
         id: export
         run: |
-          IMG="${{ steps.meta.outputs.tag }}"
-          DIGEST=$(docker buildx imagetools inspect "$IMG" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          DIGEST=$(docker buildx imagetools inspect "ghcr.io/${{ github.repository_owner }}/arc-runner:latest" --format '{{json .Manifest.Digest}}' | tr -d '"')
           echo "image=ghcr.io/${{ github.repository_owner }}/arc-runner@${DIGEST}" >> $GITHUB_OUTPUT
 
   trivy:
