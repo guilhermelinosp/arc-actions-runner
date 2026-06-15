@@ -102,13 +102,11 @@ jobs:
         run: |
           SRC="${{ needs.buildx.outputs.image }}"
           DST="ghcr.io/${{ github.repository }}"
-          docker buildx imagetools create --tag "$DST:latest" "$SRC"
+          # Sempre taggear latest + SHA
+          docker buildx imagetools create --tag "$DST:latest" --tag "$DST:${GITHUB_SHA::7}" "$SRC"
+          # Tag de versao só se veio do PR staging→main (release step)
           TAG="${{ needs.release.outputs.tag }}"
           [ -n "$TAG" ] && docker buildx imagetools create --tag "$DST:$TAG" "$SRC"
-          if [ "${{ github.event_name }}" = "push" ]; then
-            LTAG=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
-            [ -n "$LTAG" ] && docker buildx imagetools create --tag "$DST:$LTAG" "$SRC"
-          fi
       - name: Sync ArgoCD
         if: github.event_name == 'push'
         env:
