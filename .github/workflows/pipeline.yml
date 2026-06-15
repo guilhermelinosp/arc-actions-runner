@@ -103,7 +103,7 @@ jobs:
         run: |
           SRC="${{ needs.buildx.outputs.image }}"
           DST="ghcr.io/${{ github.repository }}"
-          docker buildx imagetools create --tag "$DST:latest" "$SRC"
+          docker buildx imagetools create --tag "$DST:latest" --tag "$DST:${GITHUB_SHA::7}" "$SRC"
 
           # Tag de versao vinda do PR staging→main (junto com digest)
           TAG="${{ needs.release.outputs.tag }}"
