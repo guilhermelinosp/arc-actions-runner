@@ -4,7 +4,7 @@ ARG GH_VERSION=2.90.0
 ARG CRANE_VERSION=0.21.5
 ARG BUILDX_VERSION=0.33.0
 
-FROM ghcr.io/actions/actions-runner:latest AS base
+FROM summerwind/actions-runner:latest AS base
 
 USER root
 
