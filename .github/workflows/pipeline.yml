@@ -103,4 +103,6 @@ jobs:
           DST="ghcr.io/${{ github.repository }}"
           docker buildx imagetools create --tag "$DST:latest" --tag "$DST:${GITHUB_SHA::7}" "$SRC"
           TAG="${{ needs.release.outputs.tag }}"
-          [ -n "$TAG" ] && docker buildx imagetools create --tag "$DST:$TAG" "$SRC"
+          if [ -n "$TAG" ]; then
+            docker buildx imagetools create --tag "$DST:$TAG" "$SRC"
+          fi
