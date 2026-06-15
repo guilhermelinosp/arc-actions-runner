@@ -38,18 +38,21 @@ jobs:
         run: |
           NAME="arc-runner"
           echo "tag=ghcr.io/${{ github.repository_owner }}/${NAME}:build-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-      - name: Setup buildx
+      - name: Install tools (gh + buildx)
         run: |
-          # Corrigir local do plugin buildx (imagem instala em /usr/libexec, docker procura em /usr/local/lib)
-          mkdir -p ~/.docker/cli-plugins /usr/local/lib/docker/cli-plugins 2>/dev/null || true
-          if [ -f /usr/libexec/docker/cli-plugins/docker-buildx ] && [ ! -f /usr/local/lib/docker/cli-plugins/docker-buildx ]; then
-            cp /usr/libexec/docker/cli-plugins/docker-buildx ~/.docker/cli-plugins/ 2>/dev/null || true
-            sudo cp /usr/libexec/docker/cli-plugins/docker-buildx /usr/local/lib/docker/cli-plugins/ 2>/dev/null || true
+          # gh CLI
+          if ! command -v gh &>/dev/null; then
+            curl -fsSL "https://github.com/cli/cli/releases/download/v2.90.0/gh_2.90.0_linux_amd64.tar.gz" -o /tmp/gh.tar.gz
+            tar -xzf /tmp/gh.tar.gz -C /tmp && install -m 755 /tmp/gh_*/bin/gh /usr/local/bin/gh 2>/dev/null || true
           fi
+          # buildx plugin
+          mkdir -p ~/.docker/cli-plugins
           if ! docker buildx version &>/dev/null; then
             curl -fsSL "https://github.com/docker/buildx/releases/download/v0.33.0/buildx-v0.33.0.linux-amd64" \
               -o ~/.docker/cli-plugins/docker-buildx && chmod +x ~/.docker/cli-plugins/docker-buildx
           fi
+      - name: Setup buildx
+        run: |
           docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
       - name: Build and push (latest apenas)
         run: |
