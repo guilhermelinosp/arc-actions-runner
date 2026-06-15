@@ -84,6 +84,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with: { fetch-depth: 0, token: "${{ github.token }}" }
+      - name: Install gh CLI
+        run: |
+          if ! command -v gh &>/dev/null; then
+            curl -fsSL "https://github.com/cli/cli/releases/download/v2.90.0/gh_2.90.0_linux_amd64.tar.gz" -o /tmp/gh.tar.gz
+            tar -xzf /tmp/gh.tar.gz -C /tmp && install -m 755 /tmp/gh_*/bin/gh /usr/local/bin/gh 2>/dev/null || true
+            gh --version
+          fi
       - name: Bump version
         id: semver
         env: { GH_TOKEN: "${{ github.token }}" }
