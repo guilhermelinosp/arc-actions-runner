@@ -105,9 +105,9 @@ jobs:
           DST="ghcr.io/${{ github.repository }}"
           docker buildx imagetools create --tag "$DST:latest" "$SRC"
 
-          # Tag de versao vinda do PR staging→main (junto com SHA)
+          # Tag de versao vinda do PR staging→main (junto com digest)
           TAG="${{ needs.release.outputs.tag }}"
-          [ -n "$TAG" ] && docker buildx imagetools create --tag "$DST:$TAG" --tag "$DST:${GITHUB_SHA::7}" "$SRC"
+          [ -n "$TAG" ] && docker buildx imagetools create --tag "$DST:$TAG" "$SRC"
 
           # Em push, verificar se o commit HEAD já tem release tag (release.yml pode ter criado)
           if [ "${{ github.event_name }}" = "push" ]; then
