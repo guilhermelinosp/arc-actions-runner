@@ -19,124 +19,33 @@ permissions:
 jobs:
   validate:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          HEAD="${{ github.head_ref }}"
-          BASE="${{ github.base_ref }}"
-          echo "PR: $HEAD → $BASE"
-          if [ "$HEAD" = "staging" ] && [ "$BASE" = "main" ]; then
-            echo "✅ staging → main"
-            exit 0
-          fi
-          case "$HEAD" in
-            feat/*) echo "✅ branch: $HEAD" ;;
-            *) echo "❌ Use feat/*"; exit 1 ;;
-          esac
-          echo "${{ github.event.pull_request.title }}" | grep -qE '^(feat|fix|docs|style|ref|refactor|test|chore|ci|perf|build|revert)(\(.+\))?!?:\s.+' && echo "✅ PR title" || { echo "❌ CC"; exit 1; }
+    uses: guilhermelinosp/ci-templates/.github/workflows/branch-rules.yml@main
 
   buildx:
-    if: always()
-    runs-on: ubuntu-latest
-    outputs:
-      image: ${{ steps.export.outputs.image }}
-    steps:
-      - uses: actions/checkout@v6
-      - name: Login GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Meta
-        id: meta
-        run: |
-          IMAGE_NAME=$(cat config.yml 2>/dev/null | grep "image:" | awk '{print $2}') || IMAGE_NAME="${{ github.event.repository.name }}"
-          echo "tag=ghcr.io/${{ github.repository_owner }}/${IMAGE_NAME}:${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-          echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
-      - name: Setup buildx
-        run: docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
-      - name: Build and push
-        run: |
-          IMAGE="${{ steps.meta.outputs.tag }}"
-          docker buildx build --platform linux/amd64 --push --attest type=sbom --attest type=provenance,mode=max -t $IMAGE .
-      - name: Export digest
-        id: export
-        run: |
-          IMAGE="${{ steps.meta.outputs.tag }}"
-          DIGEST=$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest.Digest}}' | tr -d '"')
-          echo "image=ghcr.io/${{ github.repository_owner }}/${{ steps.meta.outputs.image_name }}@${DIGEST}" >> $GITHUB_OUTPUT
+    uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@main
+    with:
+      runner: ubuntu-latest
+      registry_owner: ${{ github.repository_owner }}
 
   trivy:
     needs: buildx
-    runs-on: ubuntu-latest
-    steps:
-      - name: Scan
-        env:
-          TRIVY_USERNAME: ${{ github.actor }}
-          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --format sarif --output trivy.sarif --no-progress "${{ needs.buildx.outputs.image }}" || true
-      - name: Upload SARIF
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: trivy.sarif
+    uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@main
+    with:
+      runner: ubuntu-latest
+      image: ${{ needs.buildx.outputs.image }}
 
   release:
     needs: [buildx, trivy]
     if: github.base_ref == 'main' && github.head_ref == 'staging'
-    outputs:
-      tag: ${{ steps.semver.outputs.tag }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          token: ${{ github.token }}
-      - name: Bump version
-        id: semver
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          LATEST=$(gh release list --repo ${{ github.repository }} --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
-          if [ -z "$LATEST" ]; then echo "tag=v1.0.1" >> $GITHUB_OUTPUT; echo "first=true" >> $GITHUB_OUTPUT; exit 0; fi
-          IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST#v}"
-          git log --format="%s" "$LATEST..HEAD" 2>/dev/null | grep -q "BREAKING CHANGE\|!:" && { MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0; } \
-            || git log --format="%s" "$LATEST..HEAD" 2>/dev/null | grep -q "^feat" && { MINOR=$((MINOR+1)); PATCH=0; } \
-            || PATCH=$((PATCH+1))
-          echo "tag=v${MAJOR}.${MINOR}.${PATCH}" >> $GITHUB_OUTPUT
-          echo "target=${{ github.sha }}" >> $GITHUB_OUTPUT
-      - name: Create release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          TAG="${{ steps.semver.outputs.tag }}"
-          gh release create "$TAG" --repo "${{ github.repository }}" --title "$TAG" --generate-notes --target "${{ github.sha }}"
+    uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
+    with:
+      runner: ubuntu-latest
 
   push:
-    needs: [buildx]
+    needs: [buildx, release]
     if: github.event_name == 'push' || (github.base_ref == 'main' && github.head_ref == 'staging')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Login GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Promote tags
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          SRC="${{ needs.buildx.outputs.image }}"
-          DST="ghcr.io/${{ github.repository }}"
-          echo "Promoting $SRC → $DST:latest"
-          docker buildx imagetools create --tag "$DST:latest" "$SRC"
-
-          # Se tiver tag do release (via PR staging→main), usa ela
-          if [ -n "${{ needs.release.outputs.tag }}" ]; then
-            echo "Also tagging: $DST:${{ needs.release.outputs.tag }}"
-            docker buildx imagetools create --tag "$DST:${{ needs.release.outputs.tag }}" "$SRC"
-          fi
-
-          # Em push direto, busca a última release para taguear
-          if [ "${{ github.event_name }}" = "push" ]; then
-            LATEST_TAG=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
-            if [ -n "$LATEST_TAG" ]; then
-              echo "Also tagging: $DST:$LATEST_TAG"
-              docker buildx imagetools create --tag "$DST:$LATEST_TAG" "$SRC"
-            fi
-          fi
+    uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@main
+    with:
+      runner: ubuntu-latest
+      image: ${{ needs.buildx.outputs.image }}
+      version: ${{ needs.release.outputs.version }}
