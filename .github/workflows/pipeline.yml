@@ -63,7 +63,7 @@ jobs:
 
   release:
     needs: [buildx, trivy]
-    if: github.ref == 'refs/heads/main' || (github.base_ref == "main")
+    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.semver.outputs.tag }}
@@ -98,7 +98,7 @@ jobs:
 
   push:
     needs: [buildx, release]
-    if: github.event_name == 'push' || (github.base_ref == "main")
+    if: github.event_name == 'push' || github.base_ref == 'main'
     runs-on: ubuntu-latest
     env: { GH_TOKEN: "${{ github.token }}" }
     steps:
