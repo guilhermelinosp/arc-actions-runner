@@ -98,23 +98,10 @@ jobs:
       - name: Login GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Promote tags
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           SRC="${{ needs.buildx.outputs.image }}"
           DST="ghcr.io/${{ github.repository }}"
           docker buildx imagetools create --tag "$DST:latest" --tag "$DST:${GITHUB_SHA::7}" "$SRC"
-
-          # Tag de versao vinda do PR staging→main (junto com digest)
           TAG="${{ needs.release.outputs.tag }}"
           [ -n "$TAG" ] && docker buildx imagetools create --tag "$DST:$TAG" "$SRC"
-
-          # Em push, verificar se o commit HEAD já tem release tag (release.yml pode ter criado)
-          if [ "${{ github.event_name }}" = "push" ]; then
-            HAS_TAG=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
-            # Só tagueia se a tag não existir no GHCR ainda
-            if [ -n "$HAS_TAG" ]; then
-              EXISTS=$(docker buildx imagetools inspect "$DST:$HAS_TAG" 2>/dev/null && echo "yes" || echo "no")
-              [ "$EXISTS" = "no" ] && docker buildx imagetools create --tag "$DST:$HAS_TAG" "$SRC"
-            fi
           fi
