@@ -39,7 +39,12 @@ jobs:
           NAME="arc-runner"
           echo "tag=ghcr.io/${{ github.repository_owner }}/${NAME}:build-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
       - name: Setup buildx
-        run: docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
+        run: |
+          mkdir -p ~/.docker/cli-plugins
+          [ ! -f ~/.docker/cli-plugins/docker-buildx ] && \
+            curl -fsSL "https://github.com/docker/buildx/releases/download/v0.33.0/buildx-v0.33.0.linux-amd64" \
+              -o ~/.docker/cli-plugins/docker-buildx && chmod +x ~/.docker/cli-plugins/docker-buildx
+          docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
       - name: Build and push (latest apenas)
         run: |
           docker buildx build --platform linux/amd64 --push --attest type=sbom --attest type=provenance,mode=max \
