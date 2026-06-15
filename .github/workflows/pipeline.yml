@@ -40,10 +40,16 @@ jobs:
           echo "tag=ghcr.io/${{ github.repository_owner }}/${NAME}:build-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
       - name: Setup buildx
         run: |
-          mkdir -p ~/.docker/cli-plugins
-          [ ! -f ~/.docker/cli-plugins/docker-buildx ] && \
+          # Corrigir local do plugin buildx (imagem instala em /usr/libexec, docker procura em /usr/local/lib)
+          mkdir -p ~/.docker/cli-plugins /usr/local/lib/docker/cli-plugins 2>/dev/null || true
+          if [ -f /usr/libexec/docker/cli-plugins/docker-buildx ] && [ ! -f /usr/local/lib/docker/cli-plugins/docker-buildx ]; then
+            cp /usr/libexec/docker/cli-plugins/docker-buildx ~/.docker/cli-plugins/ 2>/dev/null || true
+            sudo cp /usr/libexec/docker/cli-plugins/docker-buildx /usr/local/lib/docker/cli-plugins/ 2>/dev/null || true
+          fi
+          if ! docker buildx version &>/dev/null; then
             curl -fsSL "https://github.com/docker/buildx/releases/download/v0.33.0/buildx-v0.33.0.linux-amd64" \
               -o ~/.docker/cli-plugins/docker-buildx && chmod +x ~/.docker/cli-plugins/docker-buildx
+          fi
           docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
       - name: Build and push (latest apenas)
         run: |
