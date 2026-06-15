@@ -16,13 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    if: github.event_name == 'pull_request'
-    uses: guilhermelinosp/ci-templates/.github/workflows/branch-rules.yml@latest
-
   buildx:
-    needs: validate
-    if: always()
     uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@latest
     with:
       runner: ubuntu-latest
