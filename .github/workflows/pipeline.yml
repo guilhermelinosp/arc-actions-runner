@@ -109,3 +109,11 @@ jobs:
             LTAG=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
             [ -n "$LTAG" ] && docker buildx imagetools create --tag "$DST:$LTAG" "$SRC"
           fi
+      - name: Sync ArgoCD
+        if: github.event_name == 'push'
+        env:
+          ARGO_TOKEN: ${{ secrets.ARGO_TOKEN }}
+        run: |
+          curl -sf -X POST "https://argocd.hellnet.com.br/api/v1/applications/arc-runner/sync" \
+            -H "Authorization: Bearer ${{ secrets.ARGO_TOKEN }}" \
+            -d '{}' -o /dev/null && echo "✅ ArgoCD sync triggered" || echo "⚠️ ArgoCD sync failed"
