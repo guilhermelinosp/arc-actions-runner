@@ -40,11 +40,15 @@ jobs:
           echo "tag=ghcr.io/${{ github.repository_owner }}/${NAME}:build-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
       - name: Setup buildx
         run: |
-          # buildx installed in /usr/libexec, Docker looks in ~/.docker/cli-plugins
-          if ! docker buildx version &>/dev/null && [ -f /usr/libexec/docker/cli-plugins/docker-buildx ]; then
-            mkdir -p ~/.docker/cli-plugins && cp /usr/libexec/docker/cli-plugins/docker-buildx ~/.docker/cli-plugins/
+          SRC=/usr/libexec/docker/cli-plugins/docker-buildx
+          DST=/usr/local/lib/docker/cli-plugins/docker-buildx
+          if [ ! -f "$DST" ] && [ -f "$SRC" ]; then
+            mkdir -p /usr/local/lib/docker/cli-plugins && cp "$SRC" "$DST" && chmod +x "$DST"
           fi
-          docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
+          if ! docker buildx version &>/dev/null; then
+            curl -fsSL "https://github.com/docker/buildx/releases/download/v0.33.0/buildx-v0.33.0.linux-amd64" -o "$DST" && chmod +x "$DST"
+          fi
+          docker buildx version && docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
       - name: Build and push (latest apenas)
         run: |
           docker buildx build --platform linux/amd64 --push --attest type=sbom --attest type=provenance,mode=max \
