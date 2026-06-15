@@ -19,106 +19,31 @@ permissions:
 jobs:
   validate:
     if: github.event_name == 'pull_request'
-    runs-on: self-hosted
-    steps:
-      - run: |
-          H="${{ github.head_ref }}"; B="${{ github.base_ref }}"
-          echo "PR: $H → $B"
+    uses: guilhermelinosp/ci-templates/.github/workflows/branch-rules.yml@latest
 
   buildx:
-    runs-on: self-hosted
-    outputs:
-      image: ${{ steps.export.outputs.image }}
-    steps:
-      - uses: actions/checkout@v6
-      - name: Login GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Meta
-        id: meta
-        run: |
-          NAME="arc-runner"
-          echo "tag=ghcr.io/${{ github.repository_owner }}/${NAME}:build-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-      - name: Setup buildx
-        run: |
-          SRC=/usr/libexec/docker/cli-plugins/docker-buildx
-          DST=/usr/local/lib/docker/cli-plugins/docker-buildx
-          if [ ! -f "$DST" ] && [ -f "$SRC" ]; then
-            mkdir -p /usr/local/lib/docker/cli-plugins && cp "$SRC" "$DST" && chmod +x "$DST"
-          fi
-          if ! docker buildx version &>/dev/null; then
-            curl -fsSL "https://github.com/docker/buildx/releases/download/v0.33.0/buildx-v0.33.0.linux-amd64" -o "$DST" && chmod +x "$DST"
-          fi
-          docker buildx version && docker buildx create --name ci-builder --driver docker-container --use 2>/dev/null || docker buildx use ci-builder
-      - name: Build and push (latest apenas)
-        run: |
-          docker buildx build --platform linux/amd64 --push --attest type=sbom --attest type=provenance,mode=max \
-            -t "ghcr.io/${{ github.repository_owner }}/arc-runner:latest" .
-      - name: Export digest
-        id: export
-        run: |
-          DIGEST=$(docker buildx imagetools inspect "ghcr.io/${{ github.repository_owner }}/arc-runner:latest" --format '{{json .Manifest.Digest}}' | tr -d '"')
-          echo "image=ghcr.io/${{ github.repository_owner }}/arc-runner@${DIGEST}" >> $GITHUB_OUTPUT
+    uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@latest
+    with:
+      runner: self-hosted
+      registry_owner: ${{ github.repository_owner }}
 
   trivy:
     needs: buildx
-    runs-on: self-hosted
-    steps:
-      - name: Scan
-        env:
-          TRIVY_USERNAME: ${{ github.actor }}
-          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          trivy image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --format sarif --output trivy.sarif --no-progress "${{ needs.buildx.outputs.image }}" || true
+    uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@latest
+    with:
+      runner: self-hosted
+      image: ${{ needs.buildx.outputs.image }}
 
   release:
     needs: [buildx, trivy]
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
-    runs-on: self-hosted
-    outputs:
-      tag: ${{ steps.semver.outputs.tag }}
-    steps:
-      - uses: actions/checkout@v6
-        with: { fetch-depth: 0, token: "${{ github.token }}" }
-      - name: Bump version
-        id: semver
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          # Se o commit HEAD já tem tag, não criar nova
-          HEAD=$(git rev-parse HEAD)
-          HAS_TAG=$(gh release list --repo "${{ github.repository }}" --limit 1 --json tagName --jq '.[0].tagName' 2>/dev/null || echo "")
-          if git tag --points-at "$HEAD" 2>/dev/null | grep -q .; then
-            echo "Commit já tem tag, pulando"
-            echo "tag=$(git tag --points-at "$HEAD" | head -1)" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          # Calcular próxima versão
-          L=$HAS_TAG
-          [ -z "$L" ] && echo "tag=v1.0.1" >> $GITHUB_OUTPUT && exit 0
-          IFS='.' read -r M m p <<< "${L#v}"; M=${M:-1}; m=${m:-0}; p=${p:-0}
-          git log --format="%s" "$L..HEAD" 2>/dev/null | grep -q "BREAKING CHANGE\|!:" && { M=$((M+1)); m=0; p=0; } \
-            || git log --format="%s" "$L..HEAD" 2>/dev/null | grep -q "^feat" && { m=$((m+1)); p=0; } \
-            || p=$((p+1))
-          echo "tag=v${M}.${m}.${p}" >> $GITHUB_OUTPUT
-      - name: Create release
-        if: steps.semver.outputs.tag != ''
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          gh release create "${{ steps.semver.outputs.tag }}" --repo "${{ github.repository }}" --title "${{ steps.semver.outputs.tag }}" --generate-notes
+    uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@latest
 
   push:
     needs: [buildx, release]
     if: github.event_name == 'push' || github.base_ref == 'main'
-    runs-on: self-hosted
-    env: { GH_TOKEN: "${{ github.token }}" }
-    steps:
-      - name: Login GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Promote tags
-        run: |
-          SRC="${{ needs.buildx.outputs.image }}"
-          DST="ghcr.io/${{ github.repository }}"
-          docker buildx imagetools create --tag "$DST:latest" --tag "$DST:${GITHUB_SHA::7}" "$SRC"
-          TAG="${{ needs.release.outputs.tag }}"
-          if [ -n "$TAG" ]; then
-            docker buildx imagetools create --tag "$DST:$TAG" "$SRC"
-          fi
+    uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@latest
+    with:
+      runner: self-hosted
+      image: ${{ needs.buildx.outputs.image }}
+      version: ${{ needs.release.outputs.tag }}
