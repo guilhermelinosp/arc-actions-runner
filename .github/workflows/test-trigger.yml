@@ -1,9 +1,0 @@
-name: test-trigger
-on:
-  pull_request:
-    branches: [staging]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "PR trigger working!"
