@@ -118,11 +118,3 @@ jobs:
               [ "$EXISTS" = "no" ] && docker buildx imagetools create --tag "$DST:$HAS_TAG" "$SRC"
             fi
           fi
-      - name: Sync ArgoCD
-        if: github.event_name == 'push'
-        env:
-          ARGO_TOKEN: ${{ secrets.ARGO_TOKEN }}
-        run: |
-          curl -sf -X POST "https://argocd.hellnet.com.br/api/v1/applications/arc-runner/sync" \
-            -H "Authorization: Bearer ${{ secrets.ARGO_TOKEN }}" \
-            -d '{}' -o /dev/null && echo "✅ ArgoCD sync triggered" || echo "⚠️ ArgoCD sync failed"
