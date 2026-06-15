@@ -20,14 +20,14 @@ jobs:
   buildx:
     uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@latest
     with:
-      runner: self-hosted
+      runner: ubuntu-latest
       registry_owner: ${{ github.repository_owner }}
 
   trivy:
     needs: buildx
     uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@latest
     with:
-      runner: self-hosted
+      runner: ubuntu-latest
       image: ${{ needs.buildx.outputs.image }}
 
   release:
@@ -35,13 +35,13 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@latest
     with:
-      runner: self-hosted
+      runner: ubuntu-latest
 
   push:
     needs: [buildx, release]
     if: github.event_name == 'push' || github.base_ref == 'main'
     uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@latest
     with:
-      runner: self-hosted
+      runner: ubuntu-latest
       image: ${{ needs.buildx.outputs.image }}
       version: ${{ needs.release.outputs.version }}
