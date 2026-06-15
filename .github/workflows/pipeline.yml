@@ -17,14 +17,14 @@ concurrency:
 
 jobs:
   buildx:
-    uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@latest
+    uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@main
     with:
       runner: ubuntu-latest
       registry_owner: ${{ github.repository_owner }}
 
   trivy:
     needs: buildx
-    uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@latest
+    uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@main
     with:
       runner: ubuntu-latest
       image: ${{ needs.buildx.outputs.image }}
@@ -32,14 +32,14 @@ jobs:
   release:
     needs: [buildx, trivy]
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
-    uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@latest
+    uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
     with:
       runner: ubuntu-latest
 
   push:
     needs: [buildx, release]
     if: github.event_name == 'push' || github.base_ref == 'main'
-    uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@latest
+    uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@main
     with:
       runner: ubuntu-latest
       image: ${{ needs.buildx.outputs.image }}
