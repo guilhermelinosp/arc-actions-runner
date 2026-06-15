@@ -3,7 +3,7 @@ name: pipeline
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main, staging]
+    branches: [main]
   push:
     branches: [main]
 
@@ -24,9 +24,6 @@ jobs:
       - run: |
           H="${{ github.head_ref }}"; B="${{ github.base_ref }}"
           echo "PR: $H → $B"
-          [ "$H" = "staging" ] && [ "$B" = "main" ] && echo "✅ staging→main" && exit 0
-          case "$H" in feat/*) echo "✅ $H" ;; *) echo "❌ Use feat/*"; exit 1 ;; esac
-          echo "${{ github.event.pull_request.title }}" | grep -qE '^(feat|fix|docs|style|ref|refactor|test|chore|ci|perf|build|revert)(\(.+\))?!?:\s.+' && echo "✅ title" || { echo "❌ CC"; exit 1; }
 
   buildx:
     runs-on: ubuntu-latest
@@ -66,7 +63,7 @@ jobs:
 
   release:
     needs: [buildx, trivy]
-    if: github.ref == 'refs/heads/main' || (github.base_ref == 'main' && github.head_ref == 'staging')
+    if: github.ref == 'refs/heads/main' || (github.base_ref == "main")
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.semver.outputs.tag }}
@@ -101,7 +98,7 @@ jobs:
 
   push:
     needs: [buildx, release]
-    if: github.event_name == 'push' || (github.base_ref == 'main' && github.head_ref == 'staging')
+    if: github.event_name == 'push' || (github.base_ref == "main")
     runs-on: ubuntu-latest
     env: { GH_TOKEN: "${{ github.token }}" }
     steps:
