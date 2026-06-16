@@ -32,14 +32,14 @@ jobs:
 
   release:
     needs: [buildx, trivy]
-    if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
     with:
       runner: self-hosted
 
   push:
     needs: [buildx, release]
-    if: github.event_name == 'push' || github.base_ref == 'main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@main
     with:
       runner: self-hosted
