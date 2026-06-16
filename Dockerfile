@@ -3,6 +3,7 @@ ARG COSIGN_VERSION=3.0.6
 ARG GH_VERSION=2.90.0
 ARG CRANE_VERSION=0.21.5
 ARG BUILDX_VERSION=0.33.0
+ARG VAULT_VERSION=1.20.3
 
 FROM summerwind/actions-runner:latest AS base
 
@@ -72,6 +73,23 @@ RUN curl -fsSLO "https://github.com/google/go-containerregistry/releases/downloa
     install -m 755 /tmp/crane /usr/local/bin/crane && \
     rm -rf /tmp/go-containerregistry* /tmp/crane
 
+FROM base AS vault
+
+RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | \
+    gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com jammy main" \
+    > /etc/apt/sources.list.d/hashicorp.list && \
+    apt-get update && \
+    apt-get install -y vault && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+FROM base AS minio
+
+RUN curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc \
+    -o /usr/local/bin/mc && \
+    chmod +x /usr/local/bin/mc
+
 FROM base AS final
 
 COPY --from=buildx /usr/libexec/docker/cli-plugins/docker-buildx /usr/libexec/docker/cli-plugins/docker-buildx
@@ -79,6 +97,8 @@ COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=cosign /usr/local/bin/cosign /usr/local/bin/cosign
 COPY --from=gh-cli /usr/local/bin/gh /usr/local/bin/gh
 COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
+COPY --from=vault /usr/bin/vault /usr/local/bin/vault
+COPY --from=minio /usr/local/bin/mc /usr/local/bin/mc
 
 RUN mkdir -p /home/runner/_work /home/runner/_temp /home/runner/_tool && \
     chmod +x \
@@ -86,13 +106,17 @@ RUN mkdir -p /home/runner/_work /home/runner/_temp /home/runner/_tool && \
       /usr/local/bin/trivy \
       /usr/local/bin/cosign \
       /usr/local/bin/gh \
-      /usr/local/bin/crane && \
+      /usr/local/bin/crane \
+      /usr/local/bin/vault \
+      /usr/local/bin/mc && \
     chown -R runner:runner /home/runner && \
     chmod -R a+rX \
       /usr/local/bin/trivy \
       /usr/local/bin/cosign \
       /usr/local/bin/gh \
       /usr/local/bin/crane \
+      /usr/local/bin/vault \
+      /usr/local/bin/mc \
       /usr/libexec/docker/cli-plugins/docker-buildx
 
 ENV RUNNER_WORK_DIRECTORY=/home/runner/_work
