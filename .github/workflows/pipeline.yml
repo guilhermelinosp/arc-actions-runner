@@ -1,39 +1,46 @@
 name: pipeline
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
 permissions:
   contents: write
   packages: write
   id-token: write
   security-events: write
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
+
 jobs:
   buildx:
-    uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@latest
+    uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@main
     with:
       runner: self-hosted
       registry_owner: ${{ github.repository_owner }}
+
   trivy:
     needs: buildx
-    uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@latest
+    uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@main
     with:
       runner: self-hosted
       image: ${{ needs.buildx.outputs.image }}
+
   release:
     needs: [buildx, trivy]
     if: github.ref == 'refs/heads/main' || github.base_ref == 'main'
-    uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@latest
+    uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
     with:
       runner: self-hosted
+
   push:
     needs: [buildx, release]
     if: github.event_name == 'push' || github.base_ref == 'main'
-    uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@latest
+    uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@main
     with:
       runner: self-hosted
       image: ${{ needs.buildx.outputs.image }}
