@@ -27,6 +27,10 @@ jobs:
     needs: buildx
     runs-on: self-hosted
     steps:
+      - name: Setup mc config
+        run: |
+          mkdir -p ~/.mc
+          cp /opt/mc-config/config.json ~/.mc/config.json
       - name: Check MinIO access
         run: |
           echo "=== Buckets ==="
