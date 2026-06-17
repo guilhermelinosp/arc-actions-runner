@@ -23,15 +23,8 @@ jobs:
       runner: self-hosted
       registry_owner: ${{ github.repository_owner }}
 
-  trivy:
-    needs: buildx
-    uses: guilhermelinosp/ci-templates/.github/workflows/trivy.yml@main
-    with:
-      runner: self-hosted
-      image: ${{ needs.buildx.outputs.image }}
-
   release:
-    needs: [buildx, trivy]
+    needs: [buildx]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
     with:
