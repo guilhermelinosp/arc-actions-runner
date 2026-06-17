@@ -3,8 +3,6 @@ name: pipeline
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 permissions:
   contents: write
@@ -25,14 +23,12 @@ jobs:
 
   release:
     needs: [buildx]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
     with:
       runner: self-hosted
 
   push:
     needs: [buildx, release]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@main
     with:
       runner: self-hosted
