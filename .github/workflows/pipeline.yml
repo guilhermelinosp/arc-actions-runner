@@ -23,27 +23,6 @@ jobs:
       runner: self-hosted
       registry_owner: ${{ github.repository_owner }}
 
-  minio:
-    needs: buildx
-    runs-on: self-hosted
-    steps:
-      - name: Setup mc config
-        run: |
-          mkdir -p ~/.mc
-          cp /opt/mc-config/config.json ~/.mc/config.json
-      - name: Check MinIO access
-        run: |
-          echo "=== Buckets ==="
-          mc ls minio/
-      - name: Store image info
-        run: |
-          DIGEST="${{ needs.buildx.outputs.image }}"
-          echo "$DIGEST" | mc pipe minio/arc-runner/digest-${GITHUB_SHA::7}.txt
-          echo "digest stored: arc-runner/digest-${GITHUB_SHA::7}.txt"
-      - name: List stored artifacts
-        run: |
-          mc ls minio/arc-runner/ || true
-
   release:
     needs: [buildx]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
