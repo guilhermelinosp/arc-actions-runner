@@ -32,7 +32,6 @@ RUN --mount=type=cache,target=/var/cache/apt \
     gzip \
     bash \
     openssh-client \
-    pass \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -103,19 +102,7 @@ COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
 # Credential helper para docker login (evita warning de token em texto puro)
 RUN mkdir -p /home/runner/.gnupg /home/runner/.docker && \
     chmod 700 /home/runner/.gnupg && \
-    echo '{"credsStore":"pass"}' > /home/runner/.docker/config.json && \
-    chown -R runner:runner /home/runner/.gnupg /home/runner/.docker && \
     chown -R runner:runner /home/runner
-
-# Credential helper: rngd + gpg + pass (como runner)
-RUN apt-get install -y rng-tools5
-USER runner
-RUN rngd -r /dev/urandom && \
-    gpg --batch --passphrase '' --quick-gen-key 'runner@local' default default && \
-    pass init runner@local && \
-    killall rngd 2>/dev/null
-USER root
-RUN apt-get purge -y rng-tools5 && apt-get autoremove -y
 
 ENV RUNNER_WORK_DIRECTORY=/home/runner/_work
 ENV RUNNER_TEMP=/home/runner/_temp
