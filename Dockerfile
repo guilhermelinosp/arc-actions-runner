@@ -96,7 +96,7 @@ COPY --from=yq /usr/local/bin/yq /usr/local/bin/yq
 COPY --from=buildx /usr/libexec/docker/cli-plugins/docker-buildx /usr/libexec/docker/cli-plugins/docker-buildx
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=cosign /usr/local/bin/cosign /usr/local/bin/cosign
-COPY --from=gh-cli /usr/local/bin/gh /usr/local/bin/gh
+COPY --from=gh /usr/local/bin/gh /usr/local/bin/gh
 COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
 
 # Credential helper para docker login (evita warning de token em texto puro)
