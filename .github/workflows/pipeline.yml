@@ -16,18 +16,21 @@ concurrency:
 
 jobs:
   buildx:
+    secrets: inherit
     uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@main
     with:
       runner: self-hosted
       registry_owner: ${{ github.repository_owner }}
 
   release:
+    secrets: inherit
     needs: [buildx]
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
     with:
       runner: self-hosted
 
   push:
+    secrets: inherit
     needs: [buildx, release]
     uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@main
     with:
