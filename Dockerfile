@@ -126,8 +126,14 @@ RUN mkdir -p /home/runner/.gnupg /home/runner/.docker && \
     chown -R runner:runner /home/runner
 
 USER runner
-RUN gpg --batch --passphrase '' --quick-gen-key 'runner@local' default default && \
-    pass init runner@local
+# Gera entropia e cria chave GPG para pass (credential store do docker)
+RUN apt-get install -y rng-tools5 && \
+    rngd -r /dev/urandom && \
+    gpg --batch --passphrase '' --quick-gen-key 'runner@local' default default && \
+    pass init runner@local && \
+    killall rngd 2>/dev/null; \
+    apt-get purge -y rng-tools5 && \
+    apt-get autoremove -y
 USER root
 
 ENV RUNNER_WORK_DIRECTORY=/home/runner/_work
