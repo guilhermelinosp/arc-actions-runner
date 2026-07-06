@@ -4,7 +4,6 @@ ARG COSIGN_VERSION=3.1.1
 ARG GH_VERSION=2.96.0
 ARG CRANE_VERSION=0.21.7
 ARG BUILDX_VERSION=0.35.0
-ARG VAULT_VERSION=1.20.3
 ARG YQ_VERSION=4.53.3
 ARG RUNNER_VERSION=2.335.1
 
@@ -90,21 +89,6 @@ RUN curl -fsSLO "https://github.com/google/go-containerregistry/releases/downloa
     install -m 755 /tmp/crane /usr/local/bin/crane && \
     rm -rf /tmp/go-containerregistry* /tmp/crane
 
-FROM base AS vault
-
-ARG VAULT_VERSION
-
-RUN curl -fsSLO "https://releases.hashicorp.com/vault/${VAULT_VERSION}/vault_${VAULT_VERSION}_linux_amd64.zip" && \
-    unzip -j "vault_${VAULT_VERSION}_linux_amd64.zip" -d /usr/local/bin vault && \
-    chmod +x /usr/local/bin/vault && \
-    rm -f "vault_${VAULT_VERSION}_linux_amd64.zip"
-
-FROM base AS minio
-
-RUN curl -fsSLo /usr/local/bin/mc \
-    "https://dl.min.io/client/mc/release/linux-amd64/mc" && \
-    chmod +x /usr/local/bin/mc
-
 FROM base AS final
 
 LABEL org.opencontainers.image.base.name="summerwind/actions-runner:v${RUNNER_VERSION}-ubuntu-24.04"
@@ -115,8 +99,6 @@ COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=cosign /usr/local/bin/cosign /usr/local/bin/cosign
 COPY --from=gh-cli /usr/local/bin/gh /usr/local/bin/gh
 COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
-COPY --from=vault /usr/local/bin/vault /usr/local/bin/vault
-COPY --from=minio /usr/local/bin/mc /usr/local/bin/mc
 
 # Credential helper para docker login (evita warning de token em texto puro)
 RUN mkdir -p /home/runner/.gnupg /home/runner/.docker && \
