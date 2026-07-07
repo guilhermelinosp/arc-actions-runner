@@ -88,6 +88,10 @@ RUN curl -fsSLO "https://github.com/google/go-containerregistry/releases/downloa
     install -m 755 /tmp/crane /usr/local/bin/crane && \
     rm -rf /tmp/go-containerregistry* /tmp/crane
 
+FROM base AS dotnet
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --install-dir /usr/share/dotnet && \
+    ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet
+
 FROM base AS final
 
 LABEL org.opencontainers.image.base.name="summerwind/actions-runner:v${RUNNER_VERSION}-ubuntu-24.04"
@@ -98,6 +102,7 @@ COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=cosign /usr/local/bin/cosign /usr/local/bin/cosign
 COPY --from=gh /usr/local/bin/gh /usr/local/bin/gh
 COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
+COPY --from=dotnet /usr/share/dotnet /usr/share/dotnet
 
 # Credential helper para docker login (evita warning de token em texto puro)
 RUN mkdir -p /home/runner/.gnupg /home/runner/.docker && \
