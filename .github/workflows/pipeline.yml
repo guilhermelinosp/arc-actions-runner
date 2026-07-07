@@ -3,8 +3,6 @@ name: pipeline
 on:
   push:
     branches: [main]
-    tags:
-      - "v*"
 
 jobs:
   buildx:
@@ -13,12 +11,12 @@ jobs:
 
 
   release:
-    needs: []
+    needs: [buildx]
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
     secrets: inherit
 
   push:
-    needs: [buildx]
+    needs: [buildx, release]
     uses: guilhermelinosp/ci-templates/.github/workflows/push.yml@main
     secrets: inherit
     with:
