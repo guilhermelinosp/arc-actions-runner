@@ -3,9 +3,12 @@ name: pipeline
 on:
   push:
     branches: [main]
+    tags:
+      - "v*"
 
 jobs:
   buildx:
+    if: startsWith(github.ref, 'refs/tags/v')
     uses: guilhermelinosp/ci-templates/.github/workflows/buildx.yml@main
     secrets: inherit
 
