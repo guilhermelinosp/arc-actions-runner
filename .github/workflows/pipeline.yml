@@ -25,7 +25,6 @@ jobs:
     secrets: inherit
     needs: [buildx]
     uses: guilhermelinosp/ci-templates/.github/workflows/release.yml@main
-    with:
 
   push:
     secrets: inherit
