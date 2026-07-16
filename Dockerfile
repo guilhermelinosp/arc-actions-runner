@@ -6,7 +6,8 @@ ARG CRANE_VERSION=0.21.7
 ARG BUILDX_VERSION=0.35.0
 ARG YQ_VERSION=4.53.3
 ARG RUNNER_VERSION=2.335.1
-ARG DOTNET_CHANNEL=LTSc6
+ARG DOTNET_CHANNEL=LTS
+ARG GOLANG_VERSION=1.26.5
 
 # hadolint ignore=DL3006
 # hadolint ignore=DL3002
@@ -104,12 +105,11 @@ RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh &&
 
 FROM base AS golang
 
-# Resolve latest Go version at build time
-RUN curl -fsSL https://go.dev/VERSION?m=text -o /tmp/go-version && \
-    GOLANG_VERSION=$(cut -c3- /tmp/go-version) && \
-    curl -fsSL "https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz && \
+ARG GOLANG_VERSION
+
+RUN curl -fsSL "https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz && \
     tar -xzf /tmp/go.tar.gz -C /usr/local && \
-    rm -f /tmp/go.tar.gz /tmp/go-version
+    rm -f /tmp/go.tar.gz
 
 FROM base AS final
 
