@@ -6,19 +6,23 @@ ARG CRANE_VERSION=0.21.7
 ARG BUILDX_VERSION=0.35.0
 ARG YQ_VERSION=4.53.3
 ARG RUNNER_VERSION=2.335.1
+ARG DOTNET_CHANNEL=LTSc6
 
 # hadolint ignore=DL3006
+# hadolint ignore=DL3002
 FROM summerwind/actions-runner:v${RUNNER_VERSION}-ubuntu-24.04 AS base
 
 LABEL org.opencontainers.image.source="https://github.com/guilhermelinosp/arc-runner"
-LABEL org.opencontainers.image.description="Custom ARC runner with buildx, trivy, cosign, gh, crane"
+LABEL org.opencontainers.image.description="Custom ARC runner with buildx, trivy, cosign, gh, crane, dotnet, golang"
 LABEL org.opencontainers.image.version="${RUNNER_VERSION}"
 
+# hadolint ignore=DL3002
 USER root
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TERM=xterm
 
+# hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt \
     apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -89,8 +93,23 @@ RUN curl -fsSLO "https://github.com/google/go-containerregistry/releases/downloa
     rm -rf /tmp/go-containerregistry* /tmp/crane
 
 FROM base AS dotnet
-RUN curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --install-dir /usr/share/dotnet && \
-    ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet
+
+ARG DOTNET_CHANNEL
+
+# Download installer to a file (avoids pipe-to-bash), then run
+RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
+    bash /tmp/dotnet-install.sh --channel ${DOTNET_CHANNEL} --install-dir /usr/share/dotnet && \
+    ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet && \
+    rm -f /tmp/dotnet-install.sh
+
+FROM base AS golang
+
+# Resolve latest Go version at build time
+RUN curl -fsSL https://go.dev/VERSION?m=text -o /tmp/go-version && \
+    GOLANG_VERSION=$(cut -c3- /tmp/go-version) && \
+    curl -fsSL "https://go.dev/dl/go${GOLANG_VERSION}.linux-amd64.tar.gz" -o /tmp/go.tar.gz && \
+    tar -xzf /tmp/go.tar.gz -C /usr/local && \
+    rm -f /tmp/go.tar.gz /tmp/go-version
 
 FROM base AS final
 
@@ -103,16 +122,28 @@ COPY --from=cosign /usr/local/bin/cosign /usr/local/bin/cosign
 COPY --from=gh /usr/local/bin/gh /usr/local/bin/gh
 COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
 COPY --from=dotnet /usr/share/dotnet /usr/share/dotnet
+COPY --from=golang /usr/local/go /usr/local/go
 
 # Credential helper para docker login (evita warning de token em texto puro)
 RUN mkdir -p /home/runner/.gnupg /home/runner/.docker && \
     chmod 700 /home/runner/.gnupg && \
-    chown -R runner:runner /home/runner
+    chown -R runner:runner /home/runner && \
+    ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet
 
 ENV RUNNER_WORK_DIRECTORY=/home/runner/_work
 ENV RUNNER_TEMP=/home/runner/_temp
 ENV RUNNER_TOOL_CACHE=/home/runner/_tool
-ENV PATH="${PATH}:/opt/tools/bin"
+ENV PATH="${PATH}:/opt/tools/bin:/usr/share/dotnet:/usr/local/go/bin"
+
+# .NET CI hygiene: disable telemetry, logo and first-run experience
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+ENV DOTNET_NOLOGO=1
+ENV DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+
+# Go CI hygiene: writable cache/path for the runner user, sane defaults
+ENV GOPATH=/home/runner/go
+ENV GOCACHE=/home/runner/.cache/go-build
+ENV GOFLAGS=-mod=mod
 
 WORKDIR /home/runner
 USER runner
