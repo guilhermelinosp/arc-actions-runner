@@ -13,7 +13,7 @@ ARG GOLANG_VERSION=1.26.5
 FROM summerwind/actions-runner:v${RUNNER_VERSION}-ubuntu-24.04 AS base
 
 LABEL org.opencontainers.image.source="https://github.com/guilhermelinosp/arc-runner"
-LABEL org.opencontainers.image.description="Custom ARC runner with podman, trivy, cosign, gh, crane, dotnet, golang"
+LABEL org.opencontainers.image.description="Custom ARC runner with podman, buildah, skopeo, trivy, cosign, gh, crane, dotnet, golang"
 LABEL org.opencontainers.image.version="${RUNNER_VERSION}"
 
 # hadolint ignore=DL3002
@@ -37,9 +37,14 @@ RUN --mount=type=cache,target=/var/cache/apt \
     bash \
     openssh-client \
     podman \
-    podman-docker \
     buildah \
+    skopeo \
     fuse-overlayfs \
+    slirp4netns \
+    uidmap \
+    containernetworking-plugins \
+    netavark \
+    aardvark-dns \
     && apt-get remove --purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null || true \
     && apt-get autoremove --purge -y \
     && apt-get clean \
@@ -47,16 +52,12 @@ RUN --mount=type=cache,target=/var/cache/apt \
 
 RUN mkdir -p /opt/tools/bin
 
-# Podman rootless configuration for runner user
-# netns="host" avoids isolation issues on Talos; cgroupfs avoids systemd dependency
+# Rootless podman configuration for runner user
 # subuid/subgid maps runner -> 65536 subordinate IDs for rootless containers
-RUN mkdir -p /home/runner/.config/containers /etc/containers && \
-    (echo '[containers]' && echo 'netns="host"') > /home/runner/.config/containers/containers.conf && \
-    (echo '[engine]' && echo 'cgroup_manager = "cgroupfs"' && echo 'events_logger = "file"') >> /home/runner/.config/containers/containers.conf && \
-    echo '{"default":[{"type":"insecureAcceptAnything"}]}' > /etc/containers/policy.json && \
-    echo 'runner:100000:65536' > /etc/subuid && \
+# policy.json allows pulling from any registry (no signature verification for CI)
+RUN echo 'runner:100000:65536' > /etc/subuid && \
     echo 'runner:100000:65536' > /etc/subgid && \
-    chown -R runner:runner /home/runner/.config
+    echo '{"default":[{"type":"insecureAcceptAnything"}]}' > /etc/containers/policy.json
 
 FROM base AS yq
 
