@@ -3,7 +3,6 @@ ARG TRIVY_VERSION=0.72.0
 ARG COSIGN_VERSION=3.1.1
 ARG GH_VERSION=2.96.0
 ARG CRANE_VERSION=0.21.7
-ARG BUILDX_VERSION=0.35.0
 ARG YQ_VERSION=4.53.3
 ARG RUNNER_VERSION=2.335.1
 ARG DOTNET_CHANNEL=LTS
@@ -14,7 +13,7 @@ ARG GOLANG_VERSION=1.26.5
 FROM summerwind/actions-runner:v${RUNNER_VERSION}-ubuntu-24.04 AS base
 
 LABEL org.opencontainers.image.source="https://github.com/guilhermelinosp/arc-runner"
-LABEL org.opencontainers.image.description="Custom ARC runner with buildx, trivy, cosign, gh, crane, dotnet, golang"
+LABEL org.opencontainers.image.description="Custom ARC runner with podman, trivy, cosign, gh, crane, dotnet, golang"
 LABEL org.opencontainers.image.version="${RUNNER_VERSION}"
 
 # hadolint ignore=DL3002
@@ -37,10 +36,27 @@ RUN --mount=type=cache,target=/var/cache/apt \
     gzip \
     bash \
     openssh-client \
+    podman \
+    podman-docker \
+    buildah \
+    fuse-overlayfs \
+    && apt-get remove --purge -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null || true \
+    && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-RUN mkdir -p /usr/libexec/docker/cli-plugins /opt/tools/bin
+RUN mkdir -p /opt/tools/bin
+
+# Podman rootless configuration for runner user
+# netns="host" avoids isolation issues on Talos; cgroupfs avoids systemd dependency
+# subuid/subgid maps runner -> 65536 subordinate IDs for rootless containers
+RUN mkdir -p /home/runner/.config/containers /etc/containers && \
+    (echo '[containers]' && echo 'netns="host"') > /home/runner/.config/containers/containers.conf && \
+    (echo '[engine]' && echo 'cgroup_manager = "cgroupfs"' && echo 'events_logger = "file"') >> /home/runner/.config/containers/containers.conf && \
+    echo '{"default":[{"type":"insecureAcceptAnything"}]}' > /etc/containers/policy.json && \
+    echo 'runner:100000:65536' > /etc/subuid && \
+    echo 'runner:100000:65536' > /etc/subgid && \
+    chown -R runner:runner /home/runner/.config
 
 FROM base AS yq
 
@@ -49,14 +65,6 @@ ARG YQ_VERSION
 RUN curl -fsSLo /usr/local/bin/yq \
     "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" && \
     chmod +x /usr/local/bin/yq
-
-FROM base AS buildx
-
-ARG BUILDX_VERSION
-
-RUN curl -fsSLO "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-amd64" && \
-    mv "buildx-v${BUILDX_VERSION}.linux-amd64" /usr/libexec/docker/cli-plugins/docker-buildx && \
-    chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
 
 FROM base AS trivy
 
@@ -116,7 +124,6 @@ FROM base AS final
 LABEL org.opencontainers.image.base.name="summerwind/actions-runner:v${RUNNER_VERSION}-ubuntu-24.04"
 
 COPY --from=yq /usr/local/bin/yq /usr/local/bin/yq
-COPY --from=buildx /usr/libexec/docker/cli-plugins/docker-buildx /usr/libexec/docker/cli-plugins/docker-buildx
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=cosign /usr/local/bin/cosign /usr/local/bin/cosign
 COPY --from=gh /usr/local/bin/gh /usr/local/bin/gh
@@ -124,11 +131,14 @@ COPY --from=crane /usr/local/bin/crane /usr/local/bin/crane
 COPY --from=dotnet /usr/share/dotnet /usr/share/dotnet
 COPY --from=golang /usr/local/go /usr/local/go
 
-# Credential helper para docker login (evita warning de token em texto puro)
+# Credential helper for podman login (shared with podman-docker via ~/.docker/config.json)
 RUN mkdir -p /home/runner/.gnupg /home/runner/.docker && \
     chmod 700 /home/runner/.gnupg && \
     chown -R runner:runner /home/runner && \
     ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet
+
+# Prevent summerwind entrypoint from trying to start dockerd (which doesn't exist anymore)
+ENV START_DOCKERD=false
 
 ENV RUNNER_WORK_DIRECTORY=/home/runner/_work
 ENV RUNNER_TEMP=/home/runner/_temp
